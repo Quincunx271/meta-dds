@@ -1,0 +1,11 @@
+[project]
+dependencies = [
+    'semver >= 2.13.0'
+]
+
+[build-system]
+requires = [
+    'setuptools>=42',
+    'wheel'
+]
+build-backend = 'setuptools.build_meta'
