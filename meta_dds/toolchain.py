@@ -6,11 +6,33 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 
 import re
-from typing import Dict
+from typing import Optional
+
+import json5
+
+DDSToolchain = dict
+
+
+def get_dds_toolchain(dds_tcfile: Optional[str]) -> DDSToolchain:
+    if not dds_tcfile:
+        # TODO: default toolchain
+        assert False
+    if dds_tcfile.startswith(':'):
+        # TODO: Builtin toolchains
+        assert False
+    with open(dds_tcfile, 'r') as f:
+        return json5.load(f)
+
+
+def _removeprefix(s: str, prefix: str) -> str:
+    if s.startswith(prefix):
+        return s[len(prefix):]
+    else:
+        return s
 
 
 class ToolchainGenerator:
-    def __init__(self, dds_toolchain: Dict[str, str]):
+    def __init__(self, dds_toolchain: DDSToolchain):
         self.result = []
         self.dds_toolchain = dds_toolchain
 
@@ -69,9 +91,9 @@ class ToolchainGenerator:
             'c_compiler', DEFAULT_C_COMPILER[self.compiler_id]))
 
         self.cset('CMAKE_CXX_STANDARD',
-                  lambda std: std.removeprefix('c++'), 'cxx_version')
+                  lambda std: _removeprefix(std, 'c++'), 'cxx_version')
         self.cset('CMAKE_C_STANDARD',
-                  lambda std: std.removeprefix('c'), 'c_version')
+                  lambda std: _removeprefix(std, 'c'), 'c_version')
         self.set('CMAKE_CXX_EXTENSIONS:BOOL', str('gnu' in dds_toolchain.get(
             'lang_version_flag_template', '')).upper() if self.is_gnu_like else 'FALSE')
         self.nl()

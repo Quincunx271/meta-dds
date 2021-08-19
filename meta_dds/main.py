@@ -6,13 +6,21 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
 import logging
-from pathlib import Path
 import shutil
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import Optional
+
+import json5
+
 from meta_dds import cmake
+from meta_dds import toolchain as tc
 from meta_dds.cmake import CMake, CMakeFileApiV1, FileApiQuery
 
+logger = logging.getLogger(__name__)
 
-def setup(toolchain: Path, project: Path, output: Path):
+
+def run_setup(toolchain: Optional[str], project: Path, output: Path):
     assert toolchain.is_file()
     assert project.is_dir()
     output.mkdir(exist_ok=True)
@@ -24,17 +32,32 @@ def setup(toolchain: Path, project: Path, output: Path):
 
 
 def setup_main(args: argparse.Namespace):
-    setup(Path(args.toolchain), Path(args.project), Path(args.output))
+    run_setup(args.toolchain, args.project, args.output)
 
 
-def cmake_main(args: argparse.Namespace):
-    cmake_exe = CMake(cmake_exe=args.cmake_exe, source_dir=args.project,
-                      build_dir=args.output / '_cmake_build')
+def run_cmake(cmake_exe: Path, project: Path, output: Path, toolchain: Optional[str]):
+    cmake_exe = CMake(cmake_exe=cmake_exe, source_dir=project,
+                      build_dir=output / '_cmake_build')
     configure_args = cmake.default_configure_args(cmake_exe.cmake_version)
-    cmake_exe.configure(configure_args)
+
+    toolchain_contents = cmake.generate_toolchain(
+        tc.get_dds_toolchain(toolchain))
+    tc_file = output / 'cmake_toolchain.cmake'
+    if not tc_file.exists() or tc_file.read_text() != toolchain_contents:
+        logger.debug('%s toolchain file',
+                     'Updating' if tc_file.exists() else 'Creating')
+        tc_file.parent.mkdir(parents=True, exist_ok=True)
+        tc_file.write_text(toolchain_contents)
+
+    cmake_exe.configure(configure_args, toolchain=tc_file)
+
     cmake_query = CMakeFileApiV1(cmake=cmake_exe, client='meta-dds')
 
     codemodel, = cmake_query.query(FileApiQuery.CODEMODEL_V2)
+
+
+def cmake_main(args: argparse.Namespace):
+    run_cmake(args.cmake_exe, args.project, args.output, args.toolchain)
 
 
 def main():
@@ -51,18 +74,19 @@ def main():
     setup = subparsers.add_parser(
         'setup', help='Setup the project source tree')
     setup.add_argument('-t', '--toolchain', help='The DDS toolchain to use')
-    setup.add_argument('-p', '--project', default=Path.cwd(),
+    setup.add_argument('-p', '--project', type=Path, default=Path.cwd(),
                        help='The project to build. If not given, uses the current working directory.')
-    setup.add_argument('-o', '--out', '--output', default=Path.cwd() / '_build',
+    setup.add_argument('-o', '--out', '--output', type=Path, default=Path.cwd() / '_build',
                        dest='output', help='Directory where dds will write build results')
     setup.set_defaults(func=setup_main)
 
     cmake = subparsers.add_parser(
         'cmake', help='Package a CMake project into a source-dist')
-    cmake.add_argument('-t', '--toolchain', help='The DDS toolchain to use')
-    cmake.add_argument('-p', '--project', default=Path.cwd(),
+    cmake.add_argument('-t', '--toolchain', default=None,
+                       help='The DDS toolchain to use')
+    cmake.add_argument('-p', '--project', type=Path, default=Path.cwd(),
                        help='The project to build. If not given, uses the current working directory.')
-    cmake.add_argument('-o', '--out', '--output', default=Path.cwd() / '_build',
+    cmake.add_argument('-o', '--out', '--output', type=Path, default=Path.cwd() / '_build',
                        dest='output', help='Directory where dds will write build results')
     cmake.set_defaults(func=cmake_main)
 

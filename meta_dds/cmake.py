@@ -38,8 +38,8 @@ class CMake:
         _logger.debug('Found CMake version %s: %s',
                       self.cmake_version, self.cmake_exe)
 
-    def configure(self, args={}, quiet=False):
-        with NamedTemporaryFile(buffering=0, delete=True, prefix='meta-dds-cmake-cache-preconf') as tmp_cache_preload:
+    def configure(self, args={}, quiet=False, toolchain: Optional[Path] = None):
+        with NamedTemporaryFile(buffering=0, delete=True, prefix='meta-dds-cmake-cache-preconf-') as tmp_cache_preload:
             tmp_cache_preload.write(
                 generate_preloaded_cache_script(args).encode('utf-8'))
             tmp_cache_preload.flush()
@@ -49,6 +49,9 @@ class CMake:
                 '-B', str(self.build_dir),
                 '-C', str(tmp_cache_preload.name)
             ]
+            if toolchain is not None:
+                cmd.extend(['--toolchain', str(toolchain)])
+
             _logger.debug('Configuring with command: %s\nAnd configuration values:\n%s',
                           logutils.defer(lambda: shlex.join(cmd)),
                           logutils.defer(lambda: '\t\n'.join(f'{key}={value}' for key, value in args.items())))
@@ -145,13 +148,13 @@ def generate_preloaded_cache_script(cache_values: Dict[str, str]) -> str:
     return '\n'.join(f'set({key} [======[{value}]======] CACHE STRING "")' for key, value in cache_values.items())
 
 
-def generate_toolchain(dds_toolchain: Dict[str, str]) -> str:
+def generate_toolchain(dds_toolchain: toolchain.DDSToolchain) -> str:
     tcg = toolchain.ExtractSDistToolchainGenerator(dds_toolchain)
     tcg.generate()
     return tcg.get()
 
 
-def generate_toolchain_for_full_cmake_compile(dds_toolchain: Dict[str, str]) -> str:
+def generate_toolchain_for_full_cmake_compile(dds_toolchain: toolchain.DDSToolchain) -> str:
     tcg = toolchain.FullCMakeCompileToolchainGenerator(dds_toolchain)
     tcg.generate()
     return tcg.get()
