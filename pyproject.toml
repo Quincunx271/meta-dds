@@ -1,6 +1,7 @@
 [project]
 dependencies = [
-    'semver >= 2.13.0'
+    'semver >= 2.13.0',
+    'json5 >= 0.9.6'
 ]
 
 [build-system]

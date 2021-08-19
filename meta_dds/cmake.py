@@ -11,14 +11,13 @@ import shlex
 import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
-from logging import Logger, log
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional, Union
 
 from semver import VersionInfo
 
-from meta_dds import logutils
+from meta_dds import logutils, toolchain
 
 _logger = logging.getLogger(__name__)
 
@@ -144,3 +143,15 @@ def default_configure_args(cmake_version: VersionInfo) -> Dict[str, str]:
 
 def generate_preloaded_cache_script(cache_values: Dict[str, str]) -> str:
     return '\n'.join(f'set({key} [======[{value}]======] CACHE STRING "")' for key, value in cache_values.items())
+
+
+def generate_toolchain(dds_toolchain: Dict[str, str]) -> str:
+    tcg = toolchain.ExtractSDistToolchainGenerator(dds_toolchain)
+    tcg.generate()
+    return tcg.get()
+
+
+def generate_toolchain_for_full_cmake_compile(dds_toolchain: Dict[str, str]) -> str:
+    tcg = toolchain.FullCMakeCompileToolchainGenerator(dds_toolchain)
+    tcg.generate()
+    return tcg.get()
