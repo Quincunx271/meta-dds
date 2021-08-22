@@ -4,7 +4,10 @@ License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from meta_dds import exes
+import re
 from functools import partial
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, TypedDict, Union
@@ -13,16 +16,19 @@ import json5
 from semver import VersionInfo
 
 from meta_dds.error import MetaDDSException
+from meta_dds.cmake import CMakeFileApiV1, FileApiQuery
 
 
-class BadCMakeLibSpecifier(MetaDDSException):
-    def __init__(self, message: str, cmake_lib: str):
-        self.cmake_lib = cmake_lib
+class BadPackageConfiguration(MetaDDSException):
+    def __init__(self, message: str, project: Path):
+        self.project = project
         super().__init__(message)
 
-    @staticmethod
-    def format(message: str, cmake_lib: str) -> 'BadCMakeLibSpecifier':
-        return BadCMakeLibSpecifier(message=f'{message}: {cmake_lib}', cmake_lib=cmake_lib)
+
+class BadCMakeLibSpecifier(BadPackageConfiguration):
+    def __init__(self, message: str, cmake_lib: str, project: Path):
+        self.cmake_lib = cmake_lib
+        super().__init__(message, project=project)
 
 
 class _DependencySpecDict(TypedDict):
@@ -44,22 +50,24 @@ class MetaDDSDict(TypedDict, total=False):
 # This cannot be properly implemented until TypedDict gets some sort of allow_extras
 MetaPackageJSONDict = dict
 
+DDSPackageJSONDict = dict
 
-@dataclass(frozen=True)
+
+@dataclass
 class Lib:
     dds_name: str
     cmake_name: str
 
     @staticmethod
-    def parse(dds_pkg_name: str, cmake_name: str) -> 'Lib':
+    def parse(dds_pkg_name: str, cmake_name: str, project: Path) -> 'Lib':
         if '::' in cmake_name:
             libparts = cmake_name.split('::')
             if len(libparts) != 2:
                 raise BadCMakeLibSpecifier(
-                    f"Only one `::' allowed in CMake library. Given: ``{cmake_name}''", cmake_name)
+                    f"Only one `::' allowed in CMake library. Given: ``{cmake_name}''", cmake_name, project=project)
             if libparts[0].lower() != dds_pkg_name:
                 raise BadCMakeLibSpecifier(
-                    f"``<package>`` must match corresponding DDS package in ``<package>::library''. Given: ``{cmake_name}''", cmake_name)
+                    f"``<package>`` must match corresponding DDS package in ``<package>::library''. Given: ``{cmake_name}''", cmake_name, project=project)
 
             libspec = libparts[1]
         else:
@@ -71,7 +79,7 @@ class Lib:
         return Lib(dds_name=dds_name, cmake_name=cmake_name)
 
 
-@dataclass(frozen=True)
+@dataclass
 class MetaDependency:
     name: str
     pkg_name: str
@@ -80,7 +88,7 @@ class MetaDependency:
     libs: List[Lib]
 
     @staticmethod
-    def extract(dep_or_json: Union[str, DependencySpecDict]) -> 'MetaDependency':
+    def extract(dep_or_json: Union[str, DependencySpecDict], project: Path) -> 'MetaDependency':
         if isinstance(dep_or_json, DependencySpecDict):
             pkg_id = dep_or_json['name']
             pkg_name = dep_or_json['pkg_name']
@@ -103,7 +111,7 @@ class MetaDependency:
         if pkg_name is None:
             pkg_name = name
 
-        libs = map(partial(Lib.parse, name), libs)
+        libs = map(partial(Lib.parse, name, project=project), libs)
 
         return MetaDependency(
             name=name,
@@ -114,50 +122,133 @@ class MetaDependency:
         )
 
 
-@dataclass(frozen=True)
-class MetaPackageJSON:
+@dataclass
+class PackageID:
+    namespace: str
+    name: str
+
+    def __str__(self) -> str:
+        return f'{self.namespace}/{self.name}'
+
+
+@dataclass
+class MetaPackageInfo:
+    pkg_id: PackageID = None
+    version: VersionInfo = None
+    meta_depends: List[MetaDependency] = field(default_factory=list)
+    meta_test_depends: List[MetaDependency] = field(default_factory=list)
+
+
+class MetaPackage(ABC):
+    def __init__(self, *,
+                 project_dir: Path,
+                 info: MetaPackageInfo,
+                 build_adjust_script: Optional[Path] = None):
+        self.project_dir = project_dir
+        self.info = info
+        self.build_adjust_script = build_adjust_script
+
+    @staticmethod
+    def _meta_build_dds(project: Path) -> Optional[Path]:
+        if project.joinpath('meta_build.py').exists():
+            return project / 'meta_build.py'
+        return None
+
+
+class MetaPackageDDS(MetaPackage):
     '''
     {
         ...
         meta_dds: {
             depends: [
                 "freetype@2.11.0: freetype::freetype",
-                { name: 'llvm@7.1.0', pkg_name: 'LLVM', libs: ['llvm::llvm'], configuration: {'LLVM_ENABLE_ASSERTIONS': 'ON'} },
+                { name: 'llvm@7.1.0', pkg_name: 'LLVM', libs: ['llvm::llvm'], configuration: {'HAS_FREETYPE': 'TRUE'} },
             ],
             // At some point, list executable dependencies which can be found by the depends...
-            exectables: [
+            executables: [
                 "llvm-tblgen@11.1.0"
             ]
         }
     }
+
+    The inner JSON here
     '''
 
-    raw_json: MetaPackageJSONDict
-
-    def dds_package_json(self) -> dict:
-        result = self.__json.copy()
-        del result['meta_dds']
-        return result
-
-    @property
-    def meta_dds(self) -> MetaDDSDict:
-        return self.__json['meta_dds']
-
-    def meta_depends(self) -> Iterable[MetaDependency]:
-        return map(MetaDependency, self.meta_dds['depends'])
-
-    def meta_test_depends(self) -> Iterable[MetaDependency]:
-        return map(MetaDependency, self.meta_dds['test_depends'])
+    def __init__(self, *,
+                 project_dir: Path,
+                 info: MetaPackageInfo,
+                 dds_package_json: DDSPackageJSONDict,
+                 build_adjust_script: Optional[Path] = None):
+        super().__init__(project_dir=project_dir, info=info,
+                         build_adjust_script=build_adjust_script)
+        self.dds_package_json = dds_package_json
 
 
-@dataclass(frozen=True)
-class MetaPackage:
-    package_json: MetaPackageJSON
-    build_adjust_script: Optional[Path]
+class MetaPackageCMake(MetaPackage):
+    def __init__(self, *,
+                 project_dir: Path,
+                 info: MetaPackageInfo,
+                 cmakelists: Path,
+                 build_adjust_script: Optional[Path] = None):
+        super().__init__(project_dir=project_dir, info=info,
+                         build_adjust_script=build_adjust_script)
+        self.cmakelists = cmakelists
 
 
-def load_meta_package(package_json_path: Path, meta_build_dds_path: Path) -> MetaPackage:
+def load_json5(project: Path, package_json_path: Path) -> MetaPackage:
     with open(package_json_path, 'r') as f:
-        package_json = MetaPackageJSON(json5.load(f))
+        raw_json: MetaPackageJSONDict = json5.load(f)
+        meta_dds_json: MetaDDSDict = raw_json['meta_dds']
+        del raw_json['meta_dds']
 
-    return MetaPackage(package_json, meta_build_dds_path if meta_build_dds_path.exists() else None)
+    return MetaPackageDDS(
+        project_dir=project,
+        info=MetaPackageInfo(
+            pkg_id=PackageID(raw_json['namespace'], raw_json['name']),
+            version=VersionInfo.parse(raw_json['version']),
+            meta_depends=list(
+                map(MetaDependency, meta_dds_json['depends'])),
+            meta_test_depends=list(
+                map(MetaDependency, meta_dds_json['test_depends'])),
+        ),
+        dds_package_json=raw_json,
+        build_adjust_script=MetaPackage._meta_build_dds(project),
+    )
+
+
+def load_cmake(project: Path, cmakelists: Path, pkg_info: MetaPackageInfo = None) -> MetaPackage:
+    if pkg_info is None:
+        pkg_info = MetaPackageInfo()
+
+    if pkg_info.pkg_id.name is None:
+        file_api = CMakeFileApiV1(exes.cmake, 'meta-dds')
+        codemodel, = file_api.query(FileApiQuery.CODEMODEL_V2)
+        pkg_info.pkg_id.name = codemodel['configurations'][0]['projects'][0]['name']
+
+    if pkg_info.pkg_id.namespace is None:
+        pkg_info.pkg_id.namespace = pkg_info.pkg_id.name
+
+    # TODO: extract from CMakeLists.txt
+    assert pkg_info.version is not None
+
+    return MetaPackageCMake(
+        project_dir=project,
+        info=pkg_info,
+        cmakelists=cmakelists,
+        build_adjust_script=MetaPackage._meta_build_dds(project),
+    )
+
+
+def load_meta_package(project: Path, pkg_info: Optional[MetaPackageInfo] = None) -> MetaPackage:
+    if project.joinpath('meta_package.json5').is_file():
+        return load_json5(project, project / 'meta_package.json5')
+    elif project.joinpath('CMakeLists.txt').is_file():
+        return load_cmake(project, project / 'CMakeLists.txt', pkg_info=pkg_info)
+
+    raise BadPackageConfiguration(
+        f'Project has neither a meta_package.json or CMakeLists.txt: {project}', project=project)
+
+
+MetaPackage.load_json5 = load_json5
+MetaPackage.load_cmake = load_cmake
+MetaPackage.load = load_meta_package

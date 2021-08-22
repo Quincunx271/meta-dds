@@ -22,7 +22,7 @@ from meta_dds import logutils, toolchain
 _logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass
 class CMake:
     cmake_exe: Union[str, Path]
     source_dir: Path

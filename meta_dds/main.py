@@ -6,14 +6,15 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
 import logging
+from meta_dds.dds_exe import DDS
 import shutil
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Optional
 
 import json5
 
-from meta_dds import cmake
+from meta_dds import cmake, exes, pkg_create, cli
 from meta_dds import toolchain as tc
 from meta_dds.cmake import CMake, CMakeFileApiV1, FileApiQuery
 
@@ -73,32 +74,36 @@ def main():
 
     setup = subparsers.add_parser(
         'setup', help='Setup the project source tree')
-    setup.add_argument('-t', '--toolchain', help='The DDS toolchain to use')
-    setup.add_argument('-p', '--project', type=Path, default=Path.cwd(),
-                       help='The project to build. If not given, uses the current working directory.')
-    setup.add_argument('-o', '--out', '--output', type=Path, default=Path.cwd() / '_build',
-                       dest='output', help='Directory where dds will write build results')
+    cli.add_arguments(setup, cli.toolchain, cli.project, cli.output)
     setup.set_defaults(func=setup_main)
 
+    # This "cmake" should be the "setup" subcommand; it's setting up a project tree to be built by dds.
     cmake = subparsers.add_parser(
-        'cmake', help='Package a CMake project into a source-dist')
-    cmake.add_argument('-t', '--toolchain', default=None,
-                       help='The DDS toolchain to use')
-    cmake.add_argument('-p', '--project', type=Path, default=Path.cwd(),
-                       help='The project to build. If not given, uses the current working directory.')
-    cmake.add_argument('-o', '--out', '--output', type=Path, default=Path.cwd() / '_build',
-                       dest='output', help='Directory where dds will write build results')
+        'cmake', help='Instantiate a toolchain-dependent sdist from a Meta-DDS or CMake project')
+    cli.add_arguments(cmake, cli.toolchain, cli.project, cli.output)
     cmake.set_defaults(func=cmake_main)
 
-    args = parser.parse_args()
+    pkg_create.setup_parser(subparsers.add_parser(
+        'pkg-create', help='Package a Meta-DDS or CMake project into a meta-source-dist'))
 
+    args = parser.parse_args()
     logging.basicConfig(level=_map_log_level(args.log_level))
-    try:
-        args.func
-    except AttributeError:
-        parser.print_help()
-        parser.exit(2)
-    args.func(args)
+
+    exes.dds = DDS(args.dds_exe)
+    with TemporaryDirectory(prefix='meta-dds-cmake-') as cmake_build_dir:
+        exes.cmake = CMake(
+            cmake_exe=args.cmake_exe,
+            source_dir=args.project if hasattr(
+                args, 'project') else Path.cwd(),
+            build_dir=Path(cmake_build_dir),
+        )
+
+        try:
+            args.func
+        except AttributeError:
+            parser.print_help()
+            parser.exit(2)
+        args.func(args)
 
 
 def _map_log_level(name: str) -> int:
