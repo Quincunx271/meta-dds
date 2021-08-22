@@ -228,8 +228,12 @@ def load_cmake(project: Path, cmakelists: Path, pkg_info: MetaPackageInfo = None
     if pkg_info.pkg_id.namespace is None:
         pkg_info.pkg_id.namespace = pkg_info.pkg_id.name
 
-    # TODO: extract from CMakeLists.txt
-    assert pkg_info.version is not None
+    cmakecache = exes.cmake.build_dir / 'CMakeCache.txt'
+    if pkg_info.version is None:
+        assert cmakecache.is_file()
+        m = re.search(r'^CMAKE_PROJECT_VERSION:STATIC=(.*)$', cmakecache.read_text(), flags=re.MULTILINE)
+        assert m
+        pkg_info.version = VersionInfo.parse(m.group(1))
 
     return MetaPackageCMake(
         project_dir=project,
