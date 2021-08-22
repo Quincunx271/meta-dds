@@ -6,15 +6,14 @@
 
 #pragma once
 
+#include <dds/cli/options.hpp>
+#include <dds/util/log.hpp>
 #include <debate/argument_parser.hpp>
 
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
-
-#include <dds/cli/options.hpp>
-#include <dds/util/log.hpp>
 
 namespace meta_dds {
 namespace fs = std::filesystem;

@@ -3,6 +3,9 @@
     namespace: "meta-dds",
     version: "0.0.1",
     depends: [
-        "dds@0.1.0-alpha.6"
+        "dds@0.1.0-alpha.6",
+        "boost.leaf~0.3.0",
+        "fmt^6.2.1",
+        "semver@0.2.2",
     ]
 }

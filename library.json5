@@ -1,4 +1,9 @@
 {
     name: 'meta-dds',
-    uses: ['dds/dds'],
+    uses: [
+        'dds/dds',
+        'boost/leaf',
+        'vob/semver',
+        'vob/json5',
+    ],
 }
