@@ -1,0 +1,4 @@
+{
+    name: 'meta-dds',
+    uses: ['dds/dds'],
+}

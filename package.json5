@@ -1,0 +1,8 @@
+{
+    name: "meta-dds",
+    namespace: "meta-dds",
+    version: "0.0.1",
+    depends: [
+        "dds@0.1.0-alpha.6"
+    ]
+}
