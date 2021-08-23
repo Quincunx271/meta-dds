@@ -18,6 +18,10 @@ from semver import VersionInfo
 from meta_dds.error import MetaDDSException
 from meta_dds.cmake import CMakeFileApiV1, FileApiQuery
 
+import logging
+
+_logger = logging.getLogger(__name__)
+
 
 class BadPackageConfiguration(MetaDDSException):
     def __init__(self, message: str, project: Path):
@@ -29,6 +33,15 @@ class BadCMakeLibSpecifier(BadPackageConfiguration):
     def __init__(self, message: str, cmake_lib: str, project: Path):
         self.cmake_lib = cmake_lib
         super().__init__(message, project=project)
+
+
+class CannotInferPackageInfo(BadPackageConfiguration):
+    def __init__(self, message: str, project: Path):
+        super().__init__(message, project=project)
+
+    @staticmethod
+    def of(info: str, reason: str, flag: str, project: Path) -> 'CannotInferPackageInfo':
+        return CannotInferPackageInfo(f'Unable to infer package {info}: {reason}. Pass an explicit {flag} flag.', project=project)
 
 
 class _DependencySpecDict(TypedDict):
@@ -223,17 +236,27 @@ def load_cmake(project: Path, cmakelists: Path, pkg_info: MetaPackageInfo = None
     if pkg_info.pkg_id.name is None:
         file_api = CMakeFileApiV1(exes.cmake, 'meta-dds')
         codemodel, = file_api.query(FileApiQuery.CODEMODEL_V2)
-        pkg_info.pkg_id.name = codemodel['configurations'][0]['projects'][0]['name']
+        name = codemodel['configurations'][0]['projects'][0]['name']
+        pkg_info.pkg_id.name = name
+        _logger.info('Inferred package name as %s', name)
 
     if pkg_info.pkg_id.namespace is None:
         pkg_info.pkg_id.namespace = pkg_info.pkg_id.name
+        _logger.info('Inferred package namespace as %s', pkg_info.pkg_id.name)
 
     cmakecache = exes.cmake.build_dir / 'CMakeCache.txt'
     if pkg_info.version is None:
-        assert cmakecache.is_file()
-        m = re.search(r'^CMAKE_PROJECT_VERSION:STATIC=(.*)$', cmakecache.read_text(), flags=re.MULTILINE)
-        assert m
+        if not cmakecache.is_file():
+            raise CannotInferPackageInfo.of(
+                'version', 'No CMakeCache.txt generated', '--version', project=project)
+
+        m = re.search(r'^CMAKE_PROJECT_VERSION:STATIC=(.*)$',
+                      cmakecache.read_text(), flags=re.MULTILINE)
+        if not m:
+            raise CannotInferPackageInfo.of(
+                'version', 'No VERSION in project() command', '--version', project=project)
         pkg_info.version = VersionInfo.parse(m.group(1))
+        _logger.info('Inferred package version as %s', pkg_info.version)
 
     return MetaPackageCMake(
         project_dir=project,

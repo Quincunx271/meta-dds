@@ -6,6 +6,8 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
 import logging
+from meta_dds import error, logutils
+from meta_dds.error import MetaDDSException
 from meta_dds.dds_exe import DDS
 import shutil
 from pathlib import Path
@@ -70,6 +72,8 @@ def main():
                         help='The path to the DDS executable')
     parser.add_argument('--log-level', default='info', choices=('trace', 'debug', 'info',
                                                                 'warn', 'error', 'critical', 'silent'), help='Set the meta-dds logging level.')
+    parser.add_argument('--color', '--colour', default='auto', choices=('no', 'yes', 'auto'),
+                        help='Add color to meta-dds logging output. Default: auto (detect if terminal supports color).')
     subparsers = parser.add_subparsers()
 
     setup = subparsers.add_parser(
@@ -87,7 +91,14 @@ def main():
         'pkg-create', help='Package a Meta-DDS or CMake project into a meta-source-dist'))
 
     args = parser.parse_args()
+
     logging.basicConfig(level=_map_log_level(args.log_level))
+    logging.root.handlers.clear()
+    handler = logging.StreamHandler()
+    handler.setLevel(_map_log_level(args.log_level))
+    handler.setFormatter(logutils.get_formatter(
+        logutils.ColorMode[args.color.upper()]))
+    logging.root.addHandler(handler)
 
     exes.dds = DDS(args.dds_exe)
     with TemporaryDirectory(prefix='meta-dds-cmake-') as cmake_build_dir:
@@ -103,12 +114,15 @@ def main():
         except AttributeError:
             parser.print_help()
             parser.exit(2)
-        args.func(args)
+        try:
+            args.func(args)
+        except MetaDDSException as ex:
+            logging.critical(ex, exc_info=error.is_traceback())
 
 
 def _map_log_level(name: str) -> int:
     return {
-        'trace': logging.DEBUG,
+        'trace': logging.TRACE,
         'debug': logging.DEBUG,
         'info': logging.INFO,
         'warn': logging.WARN,

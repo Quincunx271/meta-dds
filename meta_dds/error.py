@@ -4,9 +4,15 @@ License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
+import logging
+
 
 class MetaDDSException(Exception):
     '''
     A common base type for all MetaDDS exceptions
     '''
     pass
+
+
+def is_traceback() -> bool:
+    return logging.root.isEnabledFor(logging.DEBUG)
