@@ -35,7 +35,7 @@ class CMake:
         object.__setattr__(self, 'cmake_version', VersionInfo.parse(
             re.search(r'version (.*)', version_output).group(1)))
 
-        _logger.debug('Found CMake version %s: %s',
+        _logger.trace('Found CMake version %s: %s',
                       self.cmake_version, self.cmake_exe)
 
     def configure(self, args={}, quiet=False, toolchain: Optional[Path] = None):
@@ -52,8 +52,9 @@ class CMake:
             if toolchain is not None:
                 cmd.extend(['--toolchain', str(toolchain)])
 
-            _logger.debug('Configuring with command: %s\nAnd configuration values:\n%s',
+            _logger.trace('Configuring with command: %s%s%s',
                           logutils.defer(lambda: shlex.join(cmd)),
+                          '\nAnd configuration values:\n' if args else '',
                           logutils.defer(lambda: '\t\n'.join(f'{key}={value}' for key, value in args.items())))
             if quiet:
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
@@ -65,7 +66,7 @@ class CMake:
         if target is not None:
             cmd += ['--target', target]
 
-        _logger.debug('Building with command: %s',
+        _logger.trace('Building with command: %s',
                       logutils.defer(lambda: shlex.join(cmd)))
         subprocess.run(cmd, check=True)
 
@@ -101,7 +102,7 @@ class CMakeFileApiV1:
     def reply_index_path(self) -> Path:
         indices = sorted(f for f in self.reply_dir.iterdir() if f.is_file()
                          and f.name.startswith('index-') and f.suffix == '.json')
-        _logger.debug('Found reply index at %s', indices[-1])
+        _logger.trace('Found reply index at %s', indices[-1])
         return indices[-1]
 
     def query(self, *queries: List[FileApiQuery]) -> List[Path]:
@@ -109,6 +110,8 @@ class CMakeFileApiV1:
         for query in queries:
             self.query_dir.joinpath(query.value).touch(exist_ok=True)
 
+        _logger.trace('Querying CMake with %s', logutils.defer(
+            lambda: ', '.join(f"`{q.value}'" for q in queries)))
         self.cmake.configure(quiet=True)
 
         index_path = self.reply_index_path()

@@ -247,8 +247,10 @@ def load_cmake(project: Path, cmakelists: Path, pkg_info: MetaPackageInfo = None
     cmakecache = exes.cmake.build_dir / 'CMakeCache.txt'
     if pkg_info.version is None:
         if not cmakecache.is_file():
-            raise CannotInferPackageInfo.of(
-                'version', 'No CMakeCache.txt generated', '--version', project=project)
+            exes.cmake.configure()
+            if not cmakecache.is_file():
+                raise CannotInferPackageInfo.of(
+                    'version', 'No CMakeCache.txt generated', '--version', project=project)
 
         m = re.search(r'^CMAKE_PROJECT_VERSION:STATIC=(.*)$',
                       cmakecache.read_text(), flags=re.MULTILINE)

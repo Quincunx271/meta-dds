@@ -92,13 +92,14 @@ def main():
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=_map_log_level(args.log_level))
-    logging.root.handlers.clear()
-    handler = logging.StreamHandler()
-    handler.setLevel(_map_log_level(args.log_level))
-    handler.setFormatter(logutils.get_formatter(
-        logutils.ColorMode[args.color.upper()]))
-    logging.root.addHandler(handler)
+    if args.log_level != 'silent':
+        logging.basicConfig(level=_map_log_level(args.log_level))
+        logging.root.handlers.clear()
+        handler = logging.StreamHandler()
+        handler.setLevel(_map_log_level(args.log_level))
+        handler.setFormatter(logutils.get_formatter(
+            logutils.ColorMode[args.color.upper()]))
+        logging.root.addHandler(handler)
 
     exes.dds = DDS(args.dds_exe)
     with TemporaryDirectory(prefix='meta-dds-cmake-') as cmake_build_dir:
