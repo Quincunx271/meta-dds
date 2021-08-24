@@ -128,6 +128,9 @@ class Repoman:
             raise RepomanError.format('Repo is not yet initialized', self.repo)
         self.__con = sqlite3.connect(self.repo_db)
 
+    def repo_pkg_dir(self, name: str, version: VersionInfo) -> Path:
+        return self.pkg_dir / name / str(version)
+
     def commit(self):
         self.__con.commit()
 
@@ -167,7 +170,7 @@ class Repoman:
         finally:
             cur.close()
 
-        dest_dir = self.pkg_dir / name / str(version)
+        dest_dir = self.repo_pkg_dir(name, version)
         stamp_path = dest_dir / 'url.txt'
         dest_dir.mkdir(parents=True)
         stamp_path.write_text(url)
@@ -232,6 +235,8 @@ class Repoman:
         finally:
             cur.close()
 
+        shutil.rmtree(self.repo_pkg_dir(name, version))
+
 
 def repoman_init(dds_exe: Path, repo: Path, name: Optional[str] = None):
     if name is None:
@@ -276,7 +281,10 @@ def init_main(args: Namespace):
             exit(2)
 
     args.repo_dir.mkdir()
-    Repoman(args.repo_dir, args.name).init()
+    repoman = Repoman(args.repo_dir, args.name)
+    repoman.init()
+    repoman.commit()
+    repoman.close()
 
 
 def ls_main(args: Namespace):
@@ -295,12 +303,18 @@ def import_main(args: Namespace):
         repoman.import_(meta_sdist_tgz)
         _logger.info('Imported %s', meta_sdist_tgz)
 
+    repoman.commit()
+    repoman.close()
+
 
 def remove_main(args: Namespace):
     repoman = Repoman(args.repo_dir)
     for pkg_id in args.pkg_id:
         name, version_str = pkg_id.split('@', maxsplit=1)
         repoman.remove(name, VersionInfo.parse(version_str))
+
+    repoman.commit()
+    repoman.close()
 
 
 def setup_parser(parser: ArgumentParser):
