@@ -5,14 +5,15 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 import argparse
+import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 from tarfile import TarFile, TarInfo
+from tempfile import NamedTemporaryFile
 from typing import Callable, List, Optional
-import fnmatch
 
-from semver import VersionInfo
 import pathspec
+from semver import VersionInfo
 
 from meta_dds import cli, exes
 from meta_dds.cmake import CMake
@@ -67,6 +68,13 @@ def pkg_create(project: Path, output: Optional[Path], info: PkgInfoArgs):
 
         tar.add(project, arcname='', filter=multi_filter(
             simple_filter, additional_filter))
+
+        for (filename, memfile) in pkg.psuedofiles():
+            with NamedTemporaryFile(prefix='meta-dds-tar-mem-') as f:
+                f.write(memfile.encode('utf-8'))
+                f.flush()
+                f.seek(0)
+                tar.add(f.name, filename, recursive=False)
 
 
 def pkg_create_main(args: argparse.Namespace):

@@ -4,11 +4,10 @@ License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
-from enum import Enum, auto
 import logging
-from logging import CRITICAL, ERROR, INFO, WARN, Formatter, LogRecord
-from os import isatty
 import sys
+from enum import Enum, auto
+from logging import Formatter, Logger, LogRecord
 
 
 class defer:
@@ -141,3 +140,9 @@ def get_formatter(mode: ColorMode) -> Formatter:
     else:
         assert mode is ColorMode.YES
         return ColoredMetaDDSFormatter()
+
+
+def unimplemented(logger: Logger, message: str = ''):
+    logger.critical('Internal error: feature is unimplemented!%s%s',
+                    ' With message: ' if message else '', message)
+    exit(1)

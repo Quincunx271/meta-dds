@@ -6,9 +6,6 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
 import logging
-from meta_dds import error, logutils
-from meta_dds.error import MetaDDSException
-from meta_dds.dds_exe import DDS
 import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -16,9 +13,11 @@ from typing import Optional
 
 import json5
 
-from meta_dds import cmake, exes, pkg_create, cli
+from meta_dds import cli, cmake, errors, exes, logutils, pkg_create, repoman
 from meta_dds import toolchain as tc
 from meta_dds.cmake import CMake, CMakeFileApiV1, FileApiQuery
+from meta_dds.dds_exe import DDS
+from meta_dds.errors import MetaDDSException
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +89,9 @@ def main():
     pkg_create.setup_parser(subparsers.add_parser(
         'pkg-create', help='Package a Meta-DDS or CMake project into a meta-source-dist'))
 
+    repoman.setup_parser(subparsers.add_parser(
+        'repoman', help='Manage a Meta-DDS package repository'))
+
     args = parser.parse_args()
 
     if args.log_level != 'silent':
@@ -118,7 +120,7 @@ def main():
         try:
             args.func(args)
         except MetaDDSException as ex:
-            logging.critical(ex, exc_info=error.is_traceback())
+            logger.critical(ex, exc_info=errors.is_traceback())
 
 
 def _map_log_level(name: str) -> int:

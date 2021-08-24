@@ -5,8 +5,20 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 from argparse import ArgumentParser
+from enum import Enum, auto
 from pathlib import Path
 from typing import Callable
+
+
+class IfExists(Enum):
+    FAIL = 'fail'
+    SKIP = 'skip'
+    REPLACE = 'replace'
+
+
+def if_exists(parser: ArgumentParser, default: IfExists = IfExists.FAIL, *, help: str):
+    parser.add_argument('--if-exists', type=IfExists, choices=('replace', 'skip', 'fail'),
+                        default=default.value, help=help)
 
 
 def toolchain(parser: ArgumentParser):

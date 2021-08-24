@@ -4,21 +4,22 @@ License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
-from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
-from meta_dds import exes
+import dataclasses
+import logging
 import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, TypedDict, Union
+from textwrap import dedent
+from typing import Dict, Iterable, List, Optional, Tuple, TypedDict, Union
 
 import json5
 from semver import VersionInfo
 
-from meta_dds.error import MetaDDSException
-from meta_dds.cmake import CMakeFileApiV1, FileApiQuery
-
-import logging
+from meta_dds import exes
+from meta_dds.cmake import CMake, CMakeFileApiV1, FileApiQuery
+from meta_dds.errors import MetaDDSException
 
 _logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ class PackageID:
 
 @dataclass
 class MetaPackageInfo:
-    pkg_id: PackageID = None
+    pkg_id: PackageID = PackageID(namespace=None, name=None)
     version: VersionInfo = None
     meta_depends: List[MetaDependency] = field(default_factory=list)
     meta_test_depends: List[MetaDependency] = field(default_factory=list)
@@ -166,6 +167,9 @@ class MetaPackage(ABC):
         if project.joinpath('meta_build.py').exists():
             return project / 'meta_build.py'
         return None
+
+    def psuedofiles(self) -> Iterable[Tuple[str, str]]:
+        return []
 
 
 class MetaPackageDDS(MetaPackage):
@@ -207,6 +211,18 @@ class MetaPackageCMake(MetaPackage):
                          build_adjust_script=build_adjust_script)
         self.cmakelists = cmakelists
 
+    def psuedofiles(self) -> Iterable[Tuple[str, str]]:
+        yield (
+            'meta_package.info.json5',
+            dedent(f'''\
+            {{
+                name: '{self.info.pkg_id.name}',
+                namespace: '{self.info.pkg_id.namespace}',
+                version: '{self.info.version}',
+            }}
+            '''),
+        )
+
 
 def load_json5(project: Path, package_json_path: Path) -> MetaPackage:
     with open(package_json_path, 'r') as f:
@@ -233,8 +249,10 @@ def load_cmake(project: Path, cmakelists: Path, pkg_info: MetaPackageInfo = None
     if pkg_info is None:
         pkg_info = MetaPackageInfo()
 
+    cmake_exe = dataclasses.replace(exes.cmake, source_dir=project)
+
     if pkg_info.pkg_id.name is None:
-        file_api = CMakeFileApiV1(exes.cmake, 'meta-dds')
+        file_api = CMakeFileApiV1(cmake_exe, 'meta-dds')
         codemodel, = file_api.query(FileApiQuery.CODEMODEL_V2)
         name = codemodel['configurations'][0]['projects'][0]['name']
         pkg_info.pkg_id.name = name
@@ -244,10 +262,10 @@ def load_cmake(project: Path, cmakelists: Path, pkg_info: MetaPackageInfo = None
         pkg_info.pkg_id.namespace = pkg_info.pkg_id.name
         _logger.info('Inferred package namespace as %s', pkg_info.pkg_id.name)
 
-    cmakecache = exes.cmake.build_dir / 'CMakeCache.txt'
+    cmakecache = cmake_exe.build_dir / 'CMakeCache.txt'
     if pkg_info.version is None:
         if not cmakecache.is_file():
-            exes.cmake.configure()
+            cmake_exe.configure()
             if not cmakecache.is_file():
                 raise CannotInferPackageInfo.of(
                     'version', 'No CMakeCache.txt generated', '--version', project=project)
