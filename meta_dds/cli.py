@@ -5,7 +5,7 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 from argparse import ArgumentParser
-from enum import Enum, auto
+from enum import Enum
 from pathlib import Path
 from typing import Callable
 

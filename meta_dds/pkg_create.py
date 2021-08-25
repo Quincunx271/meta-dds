@@ -5,8 +5,6 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 import argparse
-import fnmatch
-from dataclasses import dataclass
 from pathlib import Path
 from tarfile import TarFile, TarInfo
 from tempfile import NamedTemporaryFile
@@ -15,10 +13,9 @@ from typing import Callable, List, Optional
 import pathspec
 from semver import VersionInfo
 
-from meta_dds import cli, exes
-from meta_dds.cmake import CMake
-from meta_dds.dds_exe import DDS
-from meta_dds.package import DDSDependency, FindPackageMap, Lib, MetaDependency, MetaPackage, MetaPackageCMake, MetaPackageInfo, PackageID
+from meta_dds import cli
+from meta_dds.package import (DDSDependency, FindPackageMap, Lib,
+                              MetaDependency, MetaPackage, MetaPackageCMake)
 
 
 def pkg_create(project: Path, output: Optional[Path], options: Optional[MetaPackageCMake.Options] = None):

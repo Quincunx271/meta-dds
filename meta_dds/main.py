@@ -11,8 +11,6 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Optional
 
-import json5
-
 from meta_dds import (cli, cmake, errors, exes, logutils, pkg_create, repoman,
                       setup)
 from meta_dds import toolchain as tc

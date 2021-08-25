@@ -8,11 +8,9 @@ import dataclasses
 import json
 import logging
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field
 from pathlib import Path
-from sys import version
-from textwrap import dedent
 from typing import Dict, Iterable, List, Optional, Tuple, TypedDict, Union
 
 import json5
@@ -21,7 +19,7 @@ from semver import VersionInfo
 from meta_dds import exes, util
 from meta_dds.cmake import CMake, CMakeFileApiV1, FileApiQuery
 from meta_dds.errors import MetaDDSException
-from meta_dds.logutils import EXIT_INTERNAL_ERROR, EXIT_USER_ERROR
+from meta_dds.logutils import EXIT_INTERNAL_ERROR
 
 _logger = logging.getLogger(__name__)
 
