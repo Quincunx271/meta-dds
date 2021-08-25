@@ -27,16 +27,17 @@ class CMake:
     cmake_exe: Union[str, Path]
     source_dir: Path
     build_dir: Path
-    cmake_version: VersionInfo = field(init=False)
+    cmake_version: VersionInfo = None
 
     def __post_init__(self):
-        version_output = subprocess.run(
-            [str(self.cmake_exe), '--version'], capture_output=True, check=True, text=True).stdout
-        object.__setattr__(self, 'cmake_version', VersionInfo.parse(
-            re.search(r'version (.*)', version_output).group(1)))
+        if self.cmake_version is None:
+            version_output = subprocess.run(
+                [str(self.cmake_exe), '--version'], capture_output=True, check=True, text=True).stdout
+            object.__setattr__(self, 'cmake_version', VersionInfo.parse(
+                re.search(r'version (.*)', version_output).group(1)))
 
-        _logger.trace('Found CMake version %s: %s',
-                      self.cmake_version, self.cmake_exe)
+            _logger.trace('Found CMake version %s: %s',
+                        self.cmake_version, self.cmake_exe)
 
     def configure(self, args={}, quiet=False, toolchain: Optional[Path] = None):
         with NamedTemporaryFile(buffering=0, delete=True, prefix='meta-dds-cmake-cache-preconf-') as tmp_cache_preload:
