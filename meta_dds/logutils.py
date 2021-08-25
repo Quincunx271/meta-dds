@@ -145,4 +145,8 @@ def get_formatter(mode: ColorMode) -> Formatter:
 def unimplemented(logger: Logger, message: str = ''):
     logger.critical('Internal error: feature is unimplemented!%s%s',
                     ' With message: ' if message else '', message)
-    exit(1)
+    exit(EXIT_INTERNAL_ERROR)
+
+
+EXIT_INTERNAL_ERROR = 2
+EXIT_USER_ERROR = 1

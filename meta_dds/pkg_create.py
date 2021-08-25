@@ -18,26 +18,11 @@ from semver import VersionInfo
 from meta_dds import cli, exes
 from meta_dds.cmake import CMake
 from meta_dds.dds_exe import DDS
-from meta_dds.package import MetaPackage, MetaPackageInfo, PackageID
+from meta_dds.package import DDSDependency, FindPackageMap, Lib, MetaDependency, MetaPackage, MetaPackageCMake, MetaPackageInfo, PackageID
 
 
-@dataclass
-class PkgInfoArgs:
-    name: Optional[str]
-    version: Optional[VersionInfo]
-    namespace: Optional[str]
-    depends: List[str]
-    meta_depends: List[str]
-
-
-def pkg_create(project: Path, output: Optional[Path], info: PkgInfoArgs):
-    pkg = MetaPackage.load(project,
-                           MetaPackageInfo(
-                               pkg_id=PackageID(info.namespace, info.name),
-                               version=info.version,
-                               meta_depends=info.meta_depends,
-                               meta_test_depends=[],
-                           ))
+def pkg_create(project: Path, output: Optional[Path], options: Optional[MetaPackageCMake.Options] = None):
+    pkg = MetaPackage.load(project, options)
     if output is None:
         output = Path(f'{pkg.info.pkg_id.name}@{pkg.info.version}.tar.gz')
     if project.joinpath('.gitignore').is_file():
@@ -81,13 +66,19 @@ def pkg_create_main(args: argparse.Namespace):
     pkg_create(
         project=args.project,
         output=args.output,
-        info=PkgInfoArgs(
-            args.name,
-            args.version,
-            args.namespace,
-            [x.strip() for x in args.depends.split(',')] if args.depends else [],
-            [x.strip() for x in args.meta_depends.split(
-                ',')] if args.meta_depends else [],
+        options=MetaPackageCMake.Options(
+            name=args.name,
+            namespace=args.namespace,
+            version=args.version,
+            find_package_map=FindPackageMap(
+                find_package_name=args.find_package_name,
+                libs=sum([[Lib.parse(dds_name.strip(), cmake_name.strip()) for dds_name, cmake_name in spec.split('=')]
+                          for spec in args.libraries.split(',')]) if args.libraries else [],
+            ) if args.find_package_name else None,
+            depends=[DDSDependency.parse(x.strip()) for x in
+                     args.depends.split(',')] if args.depends else [],
+            meta_depends=[MetaDependency.parse(x.strip()) for x in
+                          args.meta_depends.split(',')] if args.meta_depends else [],
         ))
 
 
@@ -97,17 +88,25 @@ def setup_parser(parser: argparse.ArgumentParser):
                         dest='output',
                         help='Destination path for the resulting meta source distribution archive.')
 
-    info = parser.add_argument_group(
-        'info', description='Supply information on the package (if CMake). Default: inferred from the CMake project.')
-    info.add_argument(
-        '--name', help="The package name. Default: inferred from the CMake project's project() call")
-    info.add_argument(
-        '--version', type=VersionInfo.parse, help='The package version. Default: inferred from the CMake project's project() call')
-    info.add_argument(
+    cmake_opts = parser.add_argument_group(
+        'CMake Project Options', description='Supply information on the package (if CMake). Default: inferred from the CMake project.')
+    cmake_opts.add_argument(
+        '--name', help="The package name. Default: inferred from the CMake project's project() call.")
+    cmake_opts.add_argument(
         '--namespace', help='A namespace for the package. Default: The same value as --name.')
-    info.add_argument(
+    cmake_opts.add_argument(
+        '--version', type=VersionInfo.parse, help="The package version. Default: inferred from the CMake project's project() call.")
+    cmake_opts.add_argument(
+        '--find-package-name',
+        metavar='PACKAGE',
+        help='The name of the package when found by find_package(PACKAGE). Required for CMake packages.')
+    cmake_opts.add_argument(
+        '--libraries',
+        metavar="'DDS1=CMAKE1,DDS2=CMAKE2,...'",
+        help='A comma separated list of DDS_NAME=CMAKE_NAME pairs, specifying the libraries in the CMake project and how they correspond with DDS library names.')
+    cmake_opts.add_argument(
         '--depends', help='A comma separated list of DDS dependencies.')
-    info.add_argument(
-        '--meta-depends', help='A comma separated list of meta-dds dependencies (formatted in the same manner as meta_package.json).')
+    cmake_opts.add_argument(
+        '--meta-depends', help="""A comma separated list of meta-dds dependencies formatted in the same manner as meta_package.json, i.e. either in the format of a DDS dependency or as a JSON5 object '{ name: DEP_NAME, configuration: { "CMAKE_CONFIG_VAR": "VALUE", ... } }'.""")
 
     parser.set_defaults(func=pkg_create_main)

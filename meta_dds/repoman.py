@@ -23,7 +23,6 @@ from meta_dds import cli, logutils
 from meta_dds.errors import FileNotFound, MetaDDSException
 from meta_dds.package import MetaPackage, MetaPackageInfo, PackageID
 
-
 _logger = logging.getLogger(__name__)
 
 
@@ -275,10 +274,10 @@ def init_main(args: Namespace):
             return
         elif args.if_exists is cli.IfExists.FAIL:
             _logger.error('Repo directory already exists: %s', args.repo_dir)
-            exit(1)
+            exit(logutils.EXIT_USER_ERROR)
         else:
             _logger.critical('Unknown --if-exists option: %s', args.if_exists)
-            exit(2)
+            exit(logutils.EXIT_INTERNAL_ERROR)
 
     args.repo_dir.mkdir()
     repoman = Repoman(args.repo_dir, args.name)
