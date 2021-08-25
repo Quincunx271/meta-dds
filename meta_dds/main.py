@@ -13,7 +13,7 @@ from typing import Optional
 
 import json5
 
-from meta_dds import cli, cmake, errors, exes, logutils, pkg_create, repoman
+from meta_dds import cli, cmake, errors, exes, logutils, pkg_create, repoman, setup
 from meta_dds import toolchain as tc
 from meta_dds.cmake import CMake, CMakeFileApiV1, FileApiQuery
 from meta_dds.dds_exe import DDS
@@ -66,31 +66,32 @@ def main():
     parser = argparse.ArgumentParser(
         prog='meta-dds', description='Source tree reifying DDS wrapper')
     parser.add_argument('--cmake', default='cmake', dest='cmake_exe',
-                        help='The path to the CMake executable')
+                        help='The path to the CMake executable.')
     parser.add_argument('--dds', default='dds', dest='dds_exe',
-                        help='The path to the DDS executable')
+                        help='The path to the DDS executable.')
     parser.add_argument('--log-level', default='info', choices=('trace', 'debug', 'info',
-                                                                'warn', 'error', 'critical', 'silent'), help='Set the meta-dds logging level.')
+                                                                'warn', 'error', 'critical', 'silent'),
+                        help='Set the meta-dds logging level.')
     parser.add_argument('--color', '--colour', default='auto', choices=('no', 'yes', 'auto'),
                         help='Add color to meta-dds logging output. Default: auto (detect if terminal supports color).')
     subparsers = parser.add_subparsers()
 
-    setup = subparsers.add_parser(
-        'setup', help='Setup the project source tree')
-    cli.add_arguments(setup, cli.toolchain, cli.project, cli.output)
-    setup.set_defaults(func=setup_main)
+    setup.setup_parser(subparsers.add_parser(
+        'setup', help='Setup the project source tree.'))
+    # cli.add_arguments(setup, cli.toolchain, cli.project, cli.output)
+    # setup.set_defaults(func=setup_main)
 
     # This "cmake" should be the "setup" subcommand; it's setting up a project tree to be built by dds.
     cmake = subparsers.add_parser(
-        'cmake', help='Instantiate a toolchain-dependent sdist from a Meta-DDS or CMake project')
+        'cmake', help='Instantiate a toolchain-dependent sdist from a Meta-DDS or CMake project.')
     cli.add_arguments(cmake, cli.toolchain, cli.project, cli.output)
     cmake.set_defaults(func=cmake_main)
 
     pkg_create.setup_parser(subparsers.add_parser(
-        'pkg-create', help='Package a Meta-DDS or CMake project into a meta-source-dist'))
+        'pkg-create', help='Package a Meta-DDS or CMake project into a meta-source-dist.'))
 
     repoman.setup_parser(subparsers.add_parser(
-        'repoman', help='Manage a Meta-DDS package repository'))
+        'repoman', help='Manage a Meta-DDS package repository.'))
 
     args = parser.parse_args()
 

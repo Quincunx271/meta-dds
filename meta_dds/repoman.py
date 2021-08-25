@@ -322,39 +322,39 @@ def setup_parser(parser: ArgumentParser):
 
     def repo_dir(parser: ArgumentParser):
         parser.add_argument(
-            'repo_dir', type=Path, help='The directory of the repository to manage')
+            'repo_dir', type=Path, help='The directory of the repository to manage.')
 
     init = repoman.add_parser(
-        'init', help='Initialize a directory as a new repository')
+        'init', help='Initialize a directory as a new repository.')
     cli.if_exists(
-        init, help='What to do if the directory exists and is already a repository')
+        init, help='What to do if the directory exists and is already a repository.')
     init.add_argument(
-        '-n', '--name', default=generate_repo_name(), help='Specify the name of the new repository (default: generated)')
+        '-n', '--name', default=generate_repo_name(), help='Specify the name of the new repository. Default: a generated name.')
     repo_dir(init)
     init.set_defaults(func=init_main)
 
     ls = repoman.add_parser(
-        'ls', help='List the contents of a package repository directory')
+        'ls', help='List the contents of a package repository directory.')
     repo_dir(ls)
     ls.set_defaults(func=ls_main)
 
     add = repoman.add_parser(
-        'add', help='Add a package listing to the repository by URL')
+        'add', help='Add a package listing to the repository by URL.')
     repo_dir(add)
-    add.add_argument('url', help='URL to add to the repository')
+    add.add_argument('url', help='URL to add to the repository.')
     add.add_argument('-d', '--description', default='[no description]')
     add.set_defaults(func=add_main)
 
     import_ = repoman.add_parser(
-        'import', help='Import a meta- source distribution into the repository')
+        'import', help='Import a meta- source distribution into the repository.')
     repo_dir(import_)
     import_.add_argument('meta_sdist_file_path', type=Path, nargs='+',
-                         help='Paths to meta- source distribution archives to import')
+                         help='Paths to meta- source distribution archives to import.')
     import_.set_defaults(func=import_main)
 
     remove = repoman.add_parser(
-        'remove', help='Remove packages from a Meta-DDS package repository')
+        'remove', help='Remove packages from a Meta-DDS package repository.')
     repo_dir(remove)
     remove.add_argument('pkg_id', nargs='+',
-                        help='One or more identifiers of packages to remove')
+                        help='One or more identifiers of packages to remove.')
     remove.set_defaults(func=remove_main)

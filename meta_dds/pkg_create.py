@@ -95,19 +95,19 @@ def setup_parser(parser: argparse.ArgumentParser):
     cli.add_arguments(parser, cli.project)
     parser.add_argument('-o', '--out', '--output', type=Path, default=None,
                         dest='output',
-                        help='Destination path for the resulting meta source distribution archive')
+                        help='Destination path for the resulting meta source distribution archive.')
 
     info = parser.add_argument_group(
-        'info', description='Supply information on the package (if CMake). If not present, this is inferred from the CMake project.')
+        'info', description='Supply information on the package (if CMake). Default: inferred from the CMake project.')
     info.add_argument(
-        '--name', help='The package name (inferred from the project() call in CMake)')
+        '--name', help="The package name. Default: inferred from the CMake project's project() call")
     info.add_argument(
-        '--version', type=VersionInfo.parse, help='The package version (inferred from the project() call in CMake)')
+        '--version', type=VersionInfo.parse, help='The package version. Default: inferred from the CMake project's project() call')
     info.add_argument(
-        '--namespace', help='A namespace for the package (default same as name)')
+        '--namespace', help='A namespace for the package. Default: The same value as --name.')
     info.add_argument(
-        '--depends', help='A comma separated list of DDS dependencies')
+        '--depends', help='A comma separated list of DDS dependencies.')
     info.add_argument(
-        '--meta-depends', help='A comma separated list of meta-dds dependencies (formatted in the same manner as meta_package.json)')
+        '--meta-depends', help='A comma separated list of meta-dds dependencies (formatted in the same manner as meta_package.json).')
 
     parser.set_defaults(func=pkg_create_main)
