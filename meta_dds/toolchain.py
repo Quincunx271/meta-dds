@@ -47,6 +47,11 @@ def get_default_dds_toolchain() -> DDSToolchain:
 
 
 def get_builtin_toolchain(toolchain: str) -> DDSToolchain:
+    '''
+    Parse the builtin toolchain `toolchain`
+
+    Ported from the DDS-proper `toolchain::get_builtin()` function
+    '''
     assert toolchain[0] == ':'
     toolchain = [toolchain[1:]]
 

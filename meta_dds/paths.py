@@ -15,6 +15,9 @@ from meta_dds import logutils
 
 _logger = logging.getLogger(__name__)
 
+'''
+Dirs & logic ported from DDS proper
+'''
 
 class _Paths(ABC):
     @abstractmethod
