@@ -5,21 +5,123 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 
+import logging
 import re
-from typing import Optional
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Optional
 
 import json5
 
+from meta_dds import paths
+from meta_dds.logutils import EXIT_USER_ERROR
+
 DDSToolchain = dict
+
+_logger = logging.getLogger(__name__)
+
+
+def _default_dds_toolchain_paths() -> Iterable[Path]:
+    return (
+        Path.cwd() / 'toolchain.json5',
+        Path.cwd() / 'toolchain.jsonc',
+        Path.cwd() / 'toolchain.json',
+        paths.dds_config_dir() / 'toolchain.json5',
+        paths.dds_config_dir() / 'toolchain.jsonc',
+        paths.dds_config_dir() / 'toolchain.json',
+        paths.user_home_dir() / 'toolchain.json5',
+        paths.user_home_dir() / 'toolchain.jsonc',
+        paths.user_home_dir() / 'toolchain.json',
+    )
+
+
+def get_default_dds_toolchain() -> DDSToolchain:
+    for tc in _default_dds_toolchain_paths():
+        if tc.is_file():
+            _logger.trace('Found default toolchain: %s', tc)
+            return json5.loads(tc.read_text())
+
+    _logger.error("Unable to find a default toolchain. " +
+                  "Either specify a toolchain or provide a ``default toolchain''")
+    exit(EXIT_USER_ERROR)
+
+
+def get_builtin_toolchain(toolchain: str) -> DDSToolchain:
+    assert toolchain[0] == ':'
+    toolchain = [toolchain[1:]]
+
+    result = {}
+
+    def get_prefix(prefix: str, default=None):
+        if toolchain[0].startswith(prefix):
+            toolchain[0] = toolchain[0][len(prefix):]
+            return prefix
+
+        return default
+
+    result['debug'] = bool(get_prefix('debug:'))
+
+    def handle_prefix(key: str, prefix: str) -> bool:
+        if prefix_val := get_prefix(prefix):
+            result[key] = prefix_val[:-1]
+
+        return bool(prefix_val)
+
+    handle_prefix('compiler_launcher', 'ccache:')
+    for cpp_ver in ('98', '03', '11', '14', '17', '20', '23'):
+        if handle_prefix('cxx_version', f'c++{cpp_ver}:'):
+            if cpp_ver == '23':
+                _logger.warn(
+                    'DDS does not support C++%s at this time', cpp_ver)
+            break
+
+    if toolchain[0].startswith('gcc') or toolchain[0].startswith('clang'):
+        is_gcc = bool(get_prefix('gcc'))
+        is_clang = bool(get_prefix('clang'))
+        assert is_gcc or is_clang
+
+        c_compiler_base, cxx_compiler_base, compiler_id = ('gcc', 'g++', 'gnu') if is_gcc else (
+            'clang', 'clang++', 'clang')
+
+        if get_prefix('-'):
+            version = int(toolchain[0])
+            toolchain[0] = ''
+            if version not in (7, 8, 9, 10, 11, 12, 13):
+                _logger.warn(
+                    'Compiler version may be unsupported for %s: %i', compiler_id, version)
+
+            suffix = f'-{version}'
+        else:
+            suffix = ''
+
+        c_compiler_name = f'{c_compiler_base}{suffix}'
+        cxx_compiler_name = f'{cxx_compiler_base}{suffix}'
+
+        if toolchain[0]:
+            _logger.error(
+                "Unknown remaining builtin toolchain suffix: `%s'", toolchain[0])
+            exit(EXIT_USER_ERROR)
+
+        result['c_compiler'] = c_compiler_name
+        result['cxx_compiler'] = cxx_compiler_name
+        result['compiler_id'] = compiler_id
+    elif toolchain[0] == 'msvc':
+        result['c_compiler'] = 'cl.exe'
+        result['cxx_compiler'] = 'cl.exe'
+        result['compiler_id'] = 'msvc'
+    else:
+        _logger.error(
+            "Unknown compiler in builtin toolchain: `%s'", toolchain[0])
+        exit(EXIT_USER_ERROR)
+
+    return result
 
 
 def get_dds_toolchain(dds_tcfile: Optional[str]) -> DDSToolchain:
     if not dds_tcfile:
-        # TODO: default toolchain
-        assert False
+        return get_default_dds_toolchain()
     if dds_tcfile.startswith(':'):
-        # TODO: Builtin toolchains
-        assert False
+        return get_builtin_toolchain(dds_tcfile)
     with open(dds_tcfile, 'r') as f:
         return json5.load(f)
 
