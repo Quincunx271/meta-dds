@@ -81,10 +81,8 @@ def main():
     # setup.set_defaults(func=setup_main)
 
     # Maybe this "cmake" command = try to create a regular DDS sdist from a cmake project
-    cmake = subparsers.add_parser(
-        'cmake', help='Instantiate a toolchain-dependent sdist from a Meta-DDS or CMake project.')
-    cli.add_arguments(cmake, cli.toolchain, cli.project, cli.output)
-    cmake.set_defaults(func=cmake_main)
+    cmake.setup_parser(subparsers.add_parser(
+        'cmake', help='Create sdists from CMake projects'))
 
     pkg_create.setup_parser(subparsers.add_parser(
         'pkg-create', help='Package a Meta-DDS or CMake project into a meta-source-dist.'))

@@ -9,7 +9,8 @@ import logging
 import re
 import shlex
 import subprocess
-from dataclasses import dataclass, field
+from argparse import ArgumentParser
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -17,7 +18,7 @@ from typing import Dict, List, Optional, Union
 
 from semver import VersionInfo
 
-from meta_dds import logutils, toolchain
+from meta_dds import logutils
 
 _logger = logging.getLogger(__name__)
 
@@ -37,30 +38,32 @@ class CMake:
                 re.search(r'version (.*)', version_output).group(1)))
 
             _logger.trace('Found CMake version %s: %s',
-                        self.cmake_version, self.cmake_exe)
+                          self.cmake_version, self.cmake_exe)
+        self.source_dir = self.source_dir.resolve()
+        self.build_dir = self.build_dir.resolve()
 
     def configure(self, args={}, quiet=False, toolchain: Optional[Path] = None):
-        with NamedTemporaryFile(buffering=0, delete=True, prefix='meta-dds-cmake-cache-preconf-') as tmp_cache_preload:
-            tmp_cache_preload.write(
-                generate_preloaded_cache_script(args).encode('utf-8'))
-            tmp_cache_preload.flush()
-            cmd = [
-                str(self.cmake_exe),
-                '-S', str(self.source_dir),
-                '-B', str(self.build_dir),
-                '-C', str(tmp_cache_preload.name)
-            ]
-            if toolchain is not None:
-                cmd.extend(['--toolchain', str(toolchain)])
+        cache_preload = self.build_dir / 'meta-dds-cmake-cache-preload.cmake'
+        self.build_dir.mkdir(parents=True, exist_ok=True)
+        cache_preload.write_text(generate_preloaded_cache_script(args))
 
-            _logger.trace('Configuring with command: %s%s%s',
-                          logutils.defer(lambda: shlex.join(cmd)),
-                          '\nAnd configuration values:\n' if args else '',
-                          logutils.defer(lambda: '\t\n'.join(f'{key}={value}' for key, value in args.items())))
-            if quiet:
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
-            else:
-                subprocess.run(cmd, check=True)
+        cmd = [
+            str(self.cmake_exe),
+            '-S', str(self.source_dir),
+            '-B', str(self.build_dir),
+            '-C', str(cache_preload)
+        ]
+        if toolchain is not None:
+            cmd.extend(['--toolchain', str(toolchain.resolve())])
+
+        _logger.trace('Configuring with command: %s%s%s',
+                      logutils.defer(lambda: shlex.join(cmd)),
+                      '\nAnd configuration values:\n' if args else '',
+                      logutils.defer(lambda: '\t\n'.join(f'{key}={value}' for key, value in args.items())))
+        if quiet:
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
+        else:
+            subprocess.run(cmd, check=True)
 
     def build(self, target: Optional[str] = None):
         cmd = [str(self.cmake_exe), '--build', str(self.build_dir)]
@@ -152,13 +155,13 @@ def generate_preloaded_cache_script(cache_values: Dict[str, str]) -> str:
     return '\n'.join(f'set({key} [======[{value}]======] CACHE STRING "")' for key, value in cache_values.items())
 
 
-def generate_toolchain(dds_toolchain: toolchain.DDSToolchain) -> str:
-    tcg = toolchain.ExtractSDistToolchainGenerator(dds_toolchain)
-    tcg.generate()
-    return tcg.get()
+def setup_parser(parser: ArgumentParser):
+    # Prevents circular import error; only used for setting up argparse.
+    from meta_dds import cmake_forge_sdist
 
+    subparsers = parser.add_subparsers()
 
-def generate_toolchain_for_full_cmake_compile(dds_toolchain: toolchain.DDSToolchain) -> str:
-    tcg = toolchain.FullCMakeCompileToolchainGenerator(dds_toolchain)
-    tcg.generate()
-    return tcg.get()
+    cmake_forge_sdist.setup_parser(subparsers.add_parser(
+        'forge-sdist', help='Instantiate a toolchain-dependent sdist from a Meta-DDS or CMake project.'))
+
+    # TODO: Full CMake project sdist porter subcommand. A command that has none of this meta-sdist stuff.

@@ -233,6 +233,12 @@ class MetaPackage(ABC):
     test_depends: List[DDSDependency] = field(default_factory=list)
     meta_test_depends: List[MetaDependency] = field(default_factory=list)
 
+    def libraries(self) -> List[Lib]:
+        '''
+        Returns a list of all of the CMake names of libraries that this MetaPackage encompasses.
+        '''
+        return self.info.find_package_map.libs
+
     def psuedofiles(self) -> Iterable[Tuple[str, str]]:
         return []
 
@@ -388,14 +394,14 @@ class MetaPackageCMake(MetaPackage):
                 cmake_exe.configure()
                 if not cmakecache.is_file():
                     raise CannotInferPackageInfo.of(
-                        'version', 'No CMakeCache.txt generated', '--version',
+                        'version', 'No CMakeCache.txt generated', '--pkg-version',
                         project=cmake_exe.source_dir)
 
             m = re.search(r'^CMAKE_PROJECT_VERSION:STATIC=(.*)$',
                           cmakecache.read_text(), flags=re.MULTILINE)
             if not m:
                 raise CannotInferPackageInfo.of(
-                    'version', 'No VERSION in project() command', '--version',
+                    'version', 'No VERSION in project() command', '--pkg-version',
                     project=cmake_exe.source_dir)
             options.version = VersionInfo.parse(m.group(1))
             _logger.info('Inferred package version as %s', options.version)

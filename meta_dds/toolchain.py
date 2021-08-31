@@ -335,3 +335,15 @@ class FullCMakeCompileToolchainGenerator(ToolchainGenerator):
             return f'{static} {debug}'
         else:
             return ''
+
+
+def generate_toolchain(dds_toolchain: DDSToolchain) -> str:
+    tcg = ExtractSDistToolchainGenerator(dds_toolchain)
+    tcg.generate()
+    return tcg.get()
+
+
+def generate_toolchain_for_full_cmake_compile(dds_toolchain: DDSToolchain) -> str:
+    tcg = FullCMakeCompileToolchainGenerator(dds_toolchain)
+    tcg.generate()
+    return tcg.get()
