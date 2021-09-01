@@ -22,6 +22,7 @@ from semver import VersionInfo
 from meta_dds import cli, logutils
 from meta_dds.errors import FileNotFound, MetaDDSException
 from meta_dds.package import MetaPackage, MetaPackageInfo, PackageID
+from meta_dds.util import IfExists
 
 _logger = logging.getLogger(__name__)
 
@@ -265,14 +266,14 @@ def generate_repo_name() -> str:
 
 def init_main(args: Namespace):
     if args.repo_dir.exists():
-        if args.if_exists is cli.IfExists.REPLACE:
+        if args.if_exists is IfExists.REPLACE:
             _logger.info(
                 'Replacing existing repo directory: %s', args.repo_dir)
             shutil.rmtree(args.repo_dir)
-        elif args.if_exists is cli.IfExists.SKIP:
+        elif args.if_exists is IfExists.SKIP:
             _logger.info('Skipping existing repo directory: %s', args.repo_dir)
             return
-        elif args.if_exists is cli.IfExists.FAIL:
+        elif args.if_exists is IfExists.FAIL:
             _logger.error('Repo directory already exists: %s', args.repo_dir)
             exit(logutils.EXIT_USER_ERROR)
         else:

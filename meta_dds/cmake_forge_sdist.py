@@ -21,6 +21,7 @@ from meta_dds.errors import MetaDDSException
 from meta_dds.package import Lib, MetaPackage, MetaPackageCMake
 from meta_dds.toolchain import (DDSToolchain, generate_toolchain,
                                 get_dds_toolchain)
+from meta_dds.util import IfExists
 
 _logger = logging.getLogger(__name__)
 
@@ -46,15 +47,16 @@ class NotACMakeTarget(MetaDDSException):
 
 
 def forge(project: Path, output: Path, toolchain: Optional[str], scratch_dir: Path = None,
-          options: Optional[MetaPackageCMake.Options] = None):
+          options: Optional[MetaPackageCMake.Options] = None, if_exists: IfExists = IfExists.FAIL):
     toolchain: DDSToolchain = get_dds_toolchain(toolchain)
     cmake_toolchain_contents: str = generate_toolchain(toolchain)
     pkg = MetaPackage.load(project, options)
 
     with TemporaryDirectory(prefix='meta-dds-') as d:
         scratch_dir = scratch_dir or Path(d)
-        if not scratch_dir.exists():
-            scratch_dir.mkdir(parents=True, exist_ok=True)
+        if scratch_dir.exists():
+            shutil.rmtree(scratch_dir)
+        scratch_dir.mkdir(parents=True)
         cmake_exe = dataclasses.replace(
             exes.cmake, source_dir=project, build_dir=scratch_dir / 'cmake_build')
         dds_pkg_dir = scratch_dir / 'dds_pkg'
@@ -158,15 +160,18 @@ def forge(project: Path, output: Path, toolchain: Optional[str], scratch_dir: Pa
                     dst_path.write_text(
                         f'#include "{defines[compile_group_index].name}"\n' + dst_text)
 
+        exes.dds.pkg().create(project=dds_pkg_dir, output=output, if_exists=if_exists)
+
 
 def forge_main(args: Namespace):
     forge(args.project, args.output, args.toolchain,
-          scratch_dir=args.scratch_dir, options=cli.parse_cmake_meta_info(args))
+          scratch_dir=args.scratch_dir, options=cli.parse_cmake_meta_info(args), if_exists=args.if_exists)
 
 
 def setup_parser(parser: ArgumentParser):
     cli.add_arguments(parser, cli.toolchain, cli.project,
                       cli.output, cli.cmake_meta_info)
+    cli.if_exists(parser, help='What to do if the sdist tar.gz already exists')
     parser.add_argument('--scratch-dir', type=Path, default=None,
                         help='Path to configure as a CMake build directory in the process of forging an sdist')
     parser.set_defaults(func=forge_main)

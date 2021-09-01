@@ -5,7 +5,6 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 from argparse import ArgumentParser, Namespace
-from enum import Enum
 from pathlib import Path
 from typing import Callable
 
@@ -13,16 +12,12 @@ from semver import VersionInfo
 
 from meta_dds.package import (DDSDependency, FindPackageMap, Lib,
                               MetaDependency, MetaPackageCMake)
-
-
-class IfExists(Enum):
-    FAIL = 'fail'
-    SKIP = 'skip'
-    REPLACE = 'replace'
+from meta_dds.util import IfExists
 
 
 def if_exists(parser: ArgumentParser, default: IfExists = IfExists.FAIL, *, help: str):
-    parser.add_argument('--if-exists', type=IfExists, choices=('replace', 'skip', 'fail'),
+    parser.add_argument('--if-exists', type=IfExists, choices=IfExists,
+                        metavar=f"{{{','.join(x.value for x in IfExists)}}}",
                         default=default.value, help=help)
 
 
