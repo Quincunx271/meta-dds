@@ -1,0 +1,15 @@
+name: Move card to To Do column when assigned
+
+on:
+  issues:
+    types: [assigned]
+
+jobs:
+  move-to-todo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: alex-page/github-project-automation-plus@v0.8.1
+        with:
+          project: Task Work
+          column: To do
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
