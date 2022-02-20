@@ -9,20 +9,25 @@ Describes the source distributions dealt with by meta-dds.
 '''
 
 import shutil
+from pathlib import Path
 from typing import List
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from meta_dds.toolchain import DDSToolchain
 
-class SDist:
+@dataclass
+class SDist(ABC):
     '''
     A "Source Distribution", or SDist, is a project setup consisting only of
     compilable files. This is what dds proper deals with.
     '''
+    name: str
+    
     @abstractmethod
     def copy_to(self, dst: Path):
         ...
 
+@dataclass
 class ToolchainSpecificSDist(SDist):
     '''
     A toolchain specific SDist is an SDist for a particular toolchain. It is an
@@ -30,26 +35,30 @@ class ToolchainSpecificSDist(SDist):
     '''
     pass
 
+@dataclass
 class SDistTemplate(ABC):
     '''
     A "Source Distribution Template", or SDistTemplate, is something that can
     be _instantiated_ to produce SDists. This may include running code
     generation tools.
     '''
+    name: str
+
     @abstractmethod
-    def instantiate(self, toolchain: DDSToolchain) -> ToolchainSpecificSDist:
+    def instantiate(self, toolchain: DDSToolchain, tmp_dir: Path) -> ToolchainSpecificSDist:
         ...
 
+@dataclass
 class PureSDist(ToolchainSpecificSDist, SDistTemplate):
     '''
     A pure SDist is a source distribution that doesn't care about the specifics
     of what it's being used for. This is what dds alone knows how to handle.
     Instantiation is a no-op.
     '''
-    def instantiate(self, toolchain: Toolchain) -> PureSDist:
+    def instantiate(self, toolchain: DDSToolchain, tmp_dir: Path) -> 'PureSDist':
         return self
 
-@dataclass(frozen=True)
+@dataclass
 class DirectorySDist(SDist):
     project_root: Path
     include_dirs: List[Path]
