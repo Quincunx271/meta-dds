@@ -22,10 +22,7 @@ class SDist(ABC):
     compilable files. This is what dds proper deals with.
     '''
     name: str
-    
-    @abstractmethod
-    def copy_to(self, dst: Path):
-        ...
+    project_root: Path
 
 @dataclass
 class ToolchainSpecificSDist(SDist):
@@ -58,26 +55,3 @@ class PureSDist(ToolchainSpecificSDist, SDistTemplate):
     def instantiate(self, toolchain: DDSToolchain, tmp_dir: Path) -> 'PureSDist':
         return self
 
-@dataclass
-class DirectorySDist(SDist):
-    project_root: Path
-    include_dirs: List[Path]
-    source_dirs: List[Path]
-    test_dirs: List[Path] = field(default_factory=list)
-
-    def copy_to(self, dst: Path):
-        src_dst = dst / 'src'
-        include_dst = dst / 'include'
-        test_dst = dst / 'test'
-        for src_dir in self.source_dirs:
-            shutil.copytree(src_dir, src_dst, dir_exist_ok=True)
-        
-        for include_dir in self.include_dirs:
-            shutil.copytree(include_dir, include_dst, dir_exist_ok=True)
-
-        for test_dir in self.test_dirs:
-            shutil.copytree(test_dir, test_dst, dir_exist_ok=True)
-
-@dataclass
-class DirectoryPureSDist(PureSDist, DirectorySDist):
-    pass
