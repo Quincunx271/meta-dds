@@ -12,10 +12,10 @@ import shutil
 from argparse import ArgumentParser, Namespace
 from hashlib import sha256
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Iterable, Optional
 
 from meta_dds import cli, exes
+from meta_dds.tempfiles import TemporaryDirectory
 from meta_dds.cmake import CMakeFileApiV1, FileApiQuery
 from meta_dds.errors import MetaDDSException
 from meta_dds.package import Lib, MetaPackage, MetaPackageCMake
@@ -52,11 +52,7 @@ def forge(project: Path, output: Path, toolchain: Optional[str], scratch_dir: Pa
     cmake_toolchain_contents: str = generate_toolchain(toolchain)
     pkg = MetaPackage.load(project, options)
 
-    with TemporaryDirectory(prefix='meta-dds-') as d:
-        scratch_dir = scratch_dir or Path(d)
-        if scratch_dir.exists():
-            shutil.rmtree(scratch_dir)
-        scratch_dir.mkdir(parents=True)
+    with TemporaryDirectory(scratch_dir=scratch_dir) as d:
         cmake_exe = dataclasses.replace(
             exes.cmake, source_dir=project, build_dir=scratch_dir / 'cmake_build')
         dds_pkg_dir = scratch_dir / 'dds_pkg'
