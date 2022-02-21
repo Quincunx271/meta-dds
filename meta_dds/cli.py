@@ -31,6 +31,11 @@ def project(parser: ArgumentParser):
                         help='The project to build. Default: the current working directory.')
 
 
+def scratch_dir(parser: ArgumentParser):
+    parser.add_argument('--scratch-dir', type=Path, default=None,
+                        help='Do the work in the specified scratch directory rather than a temporary directory. This is for debugging purposes.')
+
+
 def output(parser: ArgumentParser):
     parser.add_argument('-o', '--out', '--output', type=Path, default=Path.cwd() / '_build',
                         dest='output', help=f"Directory where dds will write build results. Default: `./_build'.")

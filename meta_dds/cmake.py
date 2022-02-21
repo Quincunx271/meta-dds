@@ -262,7 +262,6 @@ def setup_parser(parser: ArgumentParser):
             cmake_exe = dataclasses.replace(exes.cmake, source_dir=args.project, build_dir=f)
             print(query_cmake_target(cmake_exe, toolchain.get_dds_toolchain(args.toolchain), args.target))
     cmake_query_target.set_defaults(func=query)
-    cli.add_arguments(cmake_query_target, cli.project, cli.toolchain)
+    cli.add_arguments(cmake_query_target, cli.project, cli.toolchain, cli.scratch_dir)
     cmake_query_target.add_argument('--target', help='', required=True)
-    cmake_query_target.add_argument('--scratch-dir', type=Path, required=True)
     # TODO: Full CMake project sdist porter subcommand. A command that has none of this meta-sdist stuff.

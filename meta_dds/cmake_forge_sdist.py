@@ -42,8 +42,6 @@ def forge_main(args: Namespace):
 
 def setup_parser(parser: ArgumentParser):
     cli.add_arguments(parser, cli.toolchain, cli.project,
-                      cli.output, cli.cmake_meta_info)
+                      cli.output, cli.cmake_meta_info, cli.scratch_dir)
     cli.if_exists(parser, help='What to do if the sdist tar.gz already exists')
-    parser.add_argument('--scratch-dir', type=Path, default=None,
-                        help='Path to configure as a CMake build directory in the process of forging an sdist')
     parser.set_defaults(func=forge_main)
