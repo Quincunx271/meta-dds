@@ -14,7 +14,7 @@ from typing import Optional, Iterable
 from pathlib import Path
 from hashlib import sha256
 
-from meta_dds import exes
+from meta_dds import exes, cmake
 from meta_dds.errors import MetaDDSException
 from meta_dds.cmake import CMakeFileApiV1, FileApiQuery
 from meta_dds.tempfiles import TemporaryDirectory
@@ -93,9 +93,42 @@ class CMakeSDistTemplate(SDistTemplate):
 
             for lib in pkg_libs:
                 try:
-                    cmake_target = targets_map[lib.cmake_name]
+                    cmake_targetx = targets_map[lib.cmake_name]
+                    cmake_target = cmake.CMakeTargetInfo()
+
+                    target_info = json.loads(file_api.reply_dir.joinpath(
+                        cmake_targetx['jsonFile']).read_text())
+                    compile_groups = target_info['compileGroups']
+
+                    for compile_info in compile_groups:
+                        if 'defines' in compile_info:
+                            for define in compile_info['defines']:
+                                define = define['define']
+                                if '=' in define:
+                                    # `=` is not part of a valid identifier. Thus, if present, the first must denote the value of the preprocessor definition.
+                                    name, value = define.split('=', maxsplit=2)
+                                else:
+                                    name = define
+                                    value = '1'
+                                cmake_target.preprocessor_defines[name] = value
+
+                    include_dirs = sum(
+                        (compile_info['includes'] for compile_info in compile_groups), start=[])
+                    for include in include_dirs:
+                        include_dir = Path(include['path'])
+                        assert include_dir.is_absolute()
+                        cmake_target.public_include_dirs.append(include_dir)
+
+                    sources = [src for src in target_info['sources']
+                               if 'compileGroupIndex' in src]
+                    for source in sources:
+                        source_path = main_src_dir.joinpath(source['path'])
+                        assert source_path.is_file(), 'Cannot package build-time generated source files yet'
+                        cmake_target.source_files.append(source['path'])
+
                 except KeyError:
-                    raise NotACMakeTarget(lib.cmake_name, targets_map.keys())
+                    cmake_target = cmake.query_cmake_target(cmake_exe, toolchain=toolchain, target=lib.cmake_name)
+                    # raise NotACMakeTarget(lib.cmake_name, targets_map.keys())
 
                 lib_dir = dds_pkg_lib_dir / lib.dds_name
                 lib_dir.mkdir(exist_ok=True)
@@ -109,57 +142,33 @@ class CMakeSDistTemplate(SDistTemplate):
                 inc_dir.mkdir(exist_ok=True)
                 src_dir.mkdir(exist_ok=True)
 
-                target_info = json.loads(file_api.reply_dir.joinpath(
-                    cmake_target['jsonFile']).read_text())
-                compile_groups = target_info['compileGroups']
-
                 defines = []  # Any -D...s that we have to add
-                for compile_info in compile_groups:
-                    if 'defines' in compile_info:
-                        def_str_builder = ['#pragma once']
-                        for define in compile_info['defines']:
-                            define = define['define']
-                            if '=' in define:
-                                # `=` is not part of a valid identifier. Thus, if present, the first must denote the value of the preprocessor definition.
-                                name, value = define.split('=', maxsplit=2)
-                            else:
-                                name = define
-                                value = ''
-                            def_str_builder.append(f'#define {name} {value}')
+                for define, value in cmake_target.preprocessor_defines.items():
+                    def_str_builder = ['#pragma once']
+                    def_str_builder.append(f'#define {define} {value}')
 
-                        def_str = '\n'.join(def_str_builder)
-                        hash = sha256(def_str.encode('utf-8')).hexdigest()
-                        define_file = src_dir / \
-                            f'meta-dds.{pkg_name}.{hash}.predefine.h'
-                        define_file.write_text(def_str)
+                    def_str = '\n'.join(def_str_builder)
+                    hash = sha256(def_str.encode('utf-8')).hexdigest()
+                    define_file = src_dir / \
+                        f'meta-dds.{pkg_name}.{hash}.predefine.h'
+                    define_file.write_text(def_str)
+                    defines.append(define_file)
 
-                        defines.append(define_file)
-                    else:
-                        defines.append(None)
-
-                include_dirs = sum(
-                    (compile_info['includes'] for compile_info in compile_groups), start=[])
-                for include in include_dirs:
-                    include_dir = Path(include['path'])
+                for include_dir in cmake_target.public_include_dirs:
                     assert include_dir.is_absolute()
                     shutil.copytree(include_dir, inc_dir, dirs_exist_ok=True)
 
-                sources = [src for src in target_info['sources']
-                           if 'compileGroupIndex' in src]
-                for source in sources:
-                    source_path = main_src_dir.joinpath(source['path'])
-                    assert source_path.is_file(), 'Cannot package build-time generated source files yet'
-                    dst_path = src_dir.joinpath(source['path'])
-                    _logger.trace("Copying source file `%s' to `%s'",
-                                  source['path'], dst_path)
+                for source in cmake_target.source_files:
+                    dst_path = src_dir.joinpath(source)
+                    _logger.trace("Copying source file `%s' to `%s'", source, dst_path)
+                    source_path = main_src_dir / source
                     dst_path.parent.mkdir(parents=True, exist_ok=True)
-                    compile_group_index = source['compileGroupIndex']
                     shutil.copy(source_path, dst_path)
 
-                    if defines[compile_group_index]:
-                        dst_text = dst_path.read_text()
-                        dst_path.write_text(
-                            f'#include "{defines[compile_group_index].name}"\n' + dst_text)
+                    dst_text = dst_path.read_text()
+                    dst_path.write_text(
+                            ''.join(f'#include "{define}\n' for define in defines)
+                            + dst_text)
 
         return ToolchainSpecificSDist(name=pkg_name, project_root=dds_pkg_dir)
 
