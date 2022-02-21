@@ -35,3 +35,10 @@ def TemporaryDirectory(scratch_dir=None, **kwargs):
         with tempfile.TemporaryDirectory(**kwargs) as f:
             yield Path(f)
 
+@contextmanager
+def TemporaryFile(**kwargs):
+    if 'prefix' not in kwargs:
+        kwargs['prefix'] = 'meta-dds-f-'
+
+    with tempfile.NamedTemporaryFile(**kwargs) as f:
+        yield Path(f.name)

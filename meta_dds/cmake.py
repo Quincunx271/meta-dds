@@ -9,8 +9,9 @@ import logging
 import re
 import shlex
 import subprocess
+import dataclasses
 from argparse import ArgumentParser
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -19,6 +20,7 @@ from typing import Dict, List, Optional, Union
 from semver import VersionInfo
 
 from meta_dds import logutils
+from meta_dds.tempfiles import TemporaryDirectory, TemporaryFile
 
 _logger = logging.getLogger(__name__)
 
@@ -125,6 +127,84 @@ class CMakeFileApiV1:
         return [json.loads(self.reply_dir.joinpath(replies[query.value]['jsonFile']).read_text()) for query in queries]
 
 
+@dataclass
+class CMakeTargetInfo:
+    public_include_dirs: List[Path] = field(default_factory=list)
+    public_preprocessor_defines: Dict[str, str] = field(default_factory=dict)
+    include_dirs: List[Path] = field(default_factory=list)
+    source_files: List[Path] = field(default_factory=list)
+    preprocessor_defines: Dict[str, str] = field(default_factory=dict)
+
+def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
+    result = CMakeTargetInfo()
+    PROPERTIES = {
+        'INTERFACE_COMPILE_DEFINITIONS': result.public_preprocessor_defines,
+        'INTERFACE_INCLUDE_DIRECTORIES': result.public_include_dirs,
+        'INTERFACE_SYSTEM_INCLUDE_DIRECTORIES': result.public_include_dirs,
+        'SOURCES': result.source_files,
+        'INCLUDE_DIRECTORIES': result.include_dirs,
+        'COMPILE_DEFINITIONS': result.preprocessor_defines,
+    }
+    from meta_dds import toolchain as tc
+    cmake_toolchain_contents: str = tc.generate_toolchain(toolchain)
+    with TemporaryFile() as file, TemporaryDirectory(scratch_dir=cmake.build_dir / '.meta_dds_query') as tmpdir:
+        project_dir = cmake.source_dir.resolve()
+        cmakelists_contents = [f'''
+        project(QueryProject)
+
+        set(str)
+        add_subdirectory("{project_dir}" "${{CMAKE_CURRENT_BINARY_DIR}}/project")
+        ''']
+
+        for property_name in PROPERTIES.keys():
+            cmakelists_contents.append(f'''
+                get_target_property(VAR {target} {property_name})
+                if(VAR)
+                    string(APPEND str "{property_name}=${{VAR}}\n")
+                endif()
+            ''')
+
+        cmakelists_contents.append(f'''
+        file(GENERATE OUTPUT "{file}" CONTENT "${{str}}"
+            TARGET {target})
+        ''')
+
+        cmake_toolchain = tmpdir / 'toolchain.cmake'
+        cmake_toolchain.write_text(cmake_toolchain_contents)
+
+        cmakelist = tmpdir / 'CMakeLists.txt'
+        cmakelist.write_text('\n'.join(cmakelists_contents))
+
+        cmake = dataclasses.replace(
+            cmake, source_dir=tmpdir, build_dir=tmpdir / 'cmake_build')
+        cmake.configure(toolchain=cmake_toolchain)
+
+        contents = file.read_text()
+
+    for line in contents.splitlines():
+        prop, value = line.split('=', maxsplit=1)
+        prop = PROPERTIES[prop]
+        if isinstance(prop, list):
+            prop += [v for v in value.split(';') if v]
+        else:
+            assert isinstance(prop, dict)
+            for item in (v for v in value.split(';') if v):
+                defs = item.split('=', maxsplit=1)
+                if len(defs) == 1:
+                    defs.append('1')
+                k, v = defs
+                prop[k] = v
+
+    return CMakeTargetInfo(
+        public_preprocessor_defines=result.public_preprocessor_defines,
+        preprocessor_defines=result.preprocessor_defines,
+        public_include_dirs=[Path(x) for x in set(result.public_include_dirs)],
+        include_dirs=[Path(x) for x in set(result.include_dirs)],
+        source_files=[Path(x) for x in set(result.source_files)],
+    )
+
+
+
 def default_configure_args(cmake_version: VersionInfo) -> Dict[str, str]:
     return {
         # Deprecated option 3.16+:
@@ -164,4 +244,15 @@ def setup_parser(parser: ArgumentParser):
     cmake_forge_sdist.setup_parser(subparsers.add_parser(
         'forge-sdist', help='Instantiate a toolchain-dependent sdist from a Meta-DDS or CMake project.'))
 
+    from meta_dds import cli
+    cmake_query_target = subparsers.add_parser('query-target')
+    def query(args):
+        from meta_dds import exes, toolchain
+        with TemporaryDirectory(scratch_dir=args.scratch_dir) as f:
+            cmake_exe = dataclasses.replace(exes.cmake, source_dir=args.project, build_dir=f)
+            print(query_cmake_target(cmake_exe, toolchain.get_dds_toolchain(args.toolchain), args.target))
+    cmake_query_target.set_defaults(func=query)
+    cli.add_arguments(cmake_query_target, cli.project, cli.toolchain)
+    cmake_query_target.add_argument('--target', help='', required=True)
+    cmake_query_target.add_argument('--scratch-dir', type=Path, required=True)
     # TODO: Full CMake project sdist porter subcommand. A command that has none of this meta-sdist stuff.
