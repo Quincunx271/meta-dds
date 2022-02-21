@@ -138,6 +138,8 @@ class CMakeTargetInfo:
     public_dependencies: List[str] = field(default_factory=list)
     dependencies: List[str] = field(default_factory=list)
 
+    is_imported: bool = False
+
 def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
     result = CMakeTargetInfo()
     PROPERTIES = {
@@ -149,6 +151,7 @@ def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
         'COMPILE_DEFINITIONS': result.preprocessor_defines,
         'LINK_LIBRARIES': result.dependencies,
         'INTERFACE_LINK_LIBRARIES': result.public_dependencies,
+        'IMPORTED': result.is_imported,
     }
     from meta_dds import toolchain as tc
     cmake_toolchain_contents: str = tc.generate_toolchain(toolchain)
@@ -211,6 +214,7 @@ def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
         source_files=[Path(x) for x in set(result.source_files)],
         public_dependencies=[x for x in set(result.public_dependencies) if '/' not in x and '.' not in x],
         dependencies=[x for x in set(result.dependencies) if '/' not in x and '.' not in x],
+        is_imported=bool(result.is_imported),
     )
 
 
