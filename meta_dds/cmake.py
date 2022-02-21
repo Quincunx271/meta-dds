@@ -134,6 +134,9 @@ class CMakeTargetInfo:
     include_dirs: List[Path] = field(default_factory=list)
     source_files: List[Path] = field(default_factory=list)
     preprocessor_defines: Dict[str, str] = field(default_factory=dict)
+    # CMake dependencies
+    public_dependencies: List[str] = field(default_factory=list)
+    dependencies: List[str] = field(default_factory=list)
 
 def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
     result = CMakeTargetInfo()
@@ -144,6 +147,8 @@ def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
         'SOURCES': result.source_files,
         'INCLUDE_DIRECTORIES': result.include_dirs,
         'COMPILE_DEFINITIONS': result.preprocessor_defines,
+        'LINK_LIBRARIES': result.dependencies,
+        'INTERFACE_LINK_LIBRARIES': result.public_dependencies,
     }
     from meta_dds import toolchain as tc
     cmake_toolchain_contents: str = tc.generate_toolchain(toolchain)
@@ -160,11 +165,13 @@ def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
             cmakelists_contents.append(f'''
                 get_target_property(VAR {target} {property_name})
                 if(VAR)
-                    string(APPEND str "{property_name}=${{VAR}}\n")
+                    string(APPEND str "{property_name}=${{VAR}}\\n")
+                    message(STATUS "{property_name}=${{VAR}}\\n")
                 endif()
             ''')
 
         cmakelists_contents.append(f'''
+        string(REGEX REPLACE "\\\\$<LINK_ONLY:([^>]*)>" "" str "${{str}}")
         file(GENERATE OUTPUT "{file}" CONTENT "${{str}}"
             TARGET {target})
         ''')
@@ -180,6 +187,7 @@ def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
         cmake.configure(toolchain=cmake_toolchain)
 
         contents = file.read_text()
+        _logger.trace('Raw contents: %s', contents)
 
     for line in contents.splitlines():
         prop, value = line.split('=', maxsplit=1)
@@ -201,6 +209,8 @@ def query_cmake_target(cmake: CMake, toolchain, target: str) -> CMakeTargetInfo:
         public_include_dirs=[Path(x) for x in set(result.public_include_dirs)],
         include_dirs=[Path(x) for x in set(result.include_dirs)],
         source_files=[Path(x) for x in set(result.source_files)],
+        public_dependencies=[x for x in set(result.public_dependencies) if '/' not in x and '.' not in x],
+        dependencies=[x for x in set(result.dependencies) if '/' not in x and '.' not in x],
     )
 
 
